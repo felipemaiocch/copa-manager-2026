@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSql, schemaSql } from "@/lib/db";
+import { ensureSchema } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -11,8 +11,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const sql = getSql();
-  await sql.query(schemaSql);
+  await ensureSchema();
 
   return NextResponse.json({ ok: true });
 }
