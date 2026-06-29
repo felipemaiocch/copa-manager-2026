@@ -5,6 +5,18 @@ import { createGame } from "@/lib/game-engine";
 
 export const runtime = "nodejs";
 
+type RoomRow = {
+  id: string;
+  code: string;
+  name: string;
+  phase: string;
+  group_round: number;
+  ko_round: string | null;
+  state: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
 function roomCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
@@ -22,11 +34,11 @@ export async function POST(request: Request) {
   const code = roomCode();
   const state = createGame([{ name: managerName, teamId }]);
   const sql = getSql();
-  const rows = await sql`
+  const rows = (await sql`
     insert into rooms (code, name, phase, group_round, ko_round, state)
     values (${code}, ${roomName}, ${state.phase}, ${state.groupRound}, ${state.koRound}, ${JSON.stringify(state)}::jsonb)
     returning id, code, name, phase, group_round, ko_round, state, created_at, updated_at
-  `;
+  `) as RoomRow[];
   await sql`
     insert into room_players (room_id, manager_name, team_id)
     values (${rows[0].id}, ${managerName}, ${teamId})

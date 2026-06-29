@@ -5,6 +5,11 @@ import { GameState, updateTactics } from "@/lib/game-engine";
 
 export const runtime = "nodejs";
 
+type RoomStateRow = {
+  id: string;
+  state: GameState;
+};
+
 export async function POST(request: Request, context: { params: Promise<{ code: string }> }) {
   const { code } = await context.params;
   const body = await request.json().catch(() => ({}));
@@ -18,10 +23,10 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
   };
 
   const sql = getSql();
-  const rooms = await sql`select id, state from rooms where code = ${code.toUpperCase()} limit 1`;
+  const rooms = (await sql`select id, state from rooms where code = ${code.toUpperCase()} limit 1`) as RoomStateRow[];
   if (!rooms.length) return NextResponse.json({ error: "Sala nao encontrada." }, { status: 404 });
 
-  const state = updateTactics(rooms[0].state as GameState, teamId, patch);
+  const state = updateTactics(rooms[0].state, teamId, patch);
   await sql`
     update rooms
     set state = ${JSON.stringify(state)}::jsonb, updated_at = now()

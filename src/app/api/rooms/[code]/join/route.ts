@@ -5,6 +5,11 @@ import { GameState } from "@/lib/game-engine";
 
 export const runtime = "nodejs";
 
+type RoomStateRow = {
+  id: string;
+  state: GameState;
+};
+
 export async function POST(request: Request, context: { params: Promise<{ code: string }> }) {
   const { code } = await context.params;
   const body = await request.json().catch(() => ({}));
@@ -16,10 +21,10 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
   }
 
   const sql = getSql();
-  const rooms = await sql`select id, state from rooms where code = ${code.toUpperCase()} limit 1`;
+  const rooms = (await sql`select id, state from rooms where code = ${code.toUpperCase()} limit 1`) as RoomStateRow[];
   if (!rooms.length) return NextResponse.json({ error: "Sala nao encontrada." }, { status: 404 });
 
-  const state = rooms[0].state as GameState;
+  const state = rooms[0].state;
   if (state.managers.some((manager) => manager.teamId === teamId)) {
     return NextResponse.json({ error: "Essa selecao ja foi escolhida." }, { status: 409 });
   }
