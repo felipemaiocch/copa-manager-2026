@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 type SqlClient = ReturnType<typeof neon>;
 
 let sqlClient: SqlClient | null = null;
+let schemaReady: Promise<void> | null = null;
 
 export function getSql() {
   if (!process.env.DATABASE_URL) {
@@ -14,6 +15,15 @@ export function getSql() {
   }
 
   return sqlClient;
+}
+
+export async function ensureSchema() {
+  if (!schemaReady) {
+    const sql = getSql();
+    schemaReady = sql.query(schemaSql).then(() => undefined);
+  }
+
+  return schemaReady;
 }
 
 export const schemaSql = `

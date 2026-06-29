@@ -29,12 +29,25 @@ export function GameClient({ teams }: { teams: TeamInfo[] }) {
   const [selectedTeam, setSelectedTeam] = useState("bra");
   const [group, setGroup] = useState("A");
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function readApi(response: Response) {
+    const text = await response.text();
+    try {
+      return text ? JSON.parse(text) : {};
+    } catch {
+      return { error: text || `Erro HTTP ${response.status}` };
+    }
+  }
 
   async function refresh(code = room?.room.code) {
     if (!code) return;
     const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const payload = await response.json();
+    const payload = await readApi(response);
+    if (!response.ok) {
+      setMessage(payload.error ?? "Nao foi possivel carregar a sala.");
+      return;
+    }
     setRoom(payload);
     const firstTeam = payload.room.state.managers[0]?.teamId;
     if (firstTeam && !payload.room.state.managers.some((manager: { teamId: string }) => manager.teamId === selectedTeam)) {
@@ -49,61 +62,110 @@ export function GameClient({ teams }: { teams: TeamInfo[] }) {
   }, [room?.room.code]);
 
   async function createRoom() {
-    setMessage("");
-    const response = await fetch("/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
-    });
-    const payload = await response.json();
-    if (!response.ok) return setMessage(payload.error ?? "Erro ao criar sala.");
-    setRoom(payload);
-    setSelectedTeam(form.teamId);
+    try {
+      setBusy(true);
+      setMessage("Criando sala...");
+      const response = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const payload = await readApi(response);
+      if (!response.ok) return setMessage(payload.error ?? "Erro ao criar sala.");
+      setRoom(payload);
+      setSelectedTeam(form.teamId);
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Erro de conexao ao criar sala.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function joinRoom() {
-    setMessage("");
-    const response = await fetch(`/api/rooms/${form.code.trim().toUpperCase()}/join`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
-    });
-    const payload = await response.json();
-    if (!response.ok) return setMessage(payload.error ?? "Erro ao entrar na sala.");
-    await refresh(form.code.trim().toUpperCase());
-    setSelectedTeam(form.teamId);
+    try {
+      setBusy(true);
+      setMessage("Entrando na sala...");
+      const code = form.code.trim().toUpperCase();
+      if (!code) {
+        setMessage("Digite o codigo da sala.");
+        return;
+      }
+      const response = await fetch(`/api/rooms/${code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const payload = await readApi(response);
+      if (!response.ok) return setMessage(payload.error ?? "Erro ao entrar na sala.");
+      await refresh(code);
+      setSelectedTeam(form.teamId);
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Erro de conexao ao entrar na sala.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function loadRoom() {
-    setMessage("");
-    await refresh(form.code.trim().toUpperCase());
+    try {
+      setBusy(true);
+      setMessage("Carregando sala...");
+      const code = form.code.trim().toUpperCase();
+      if (!code) {
+        setMessage("Digite o codigo da sala.");
+        return;
+      }
+      await refresh(code);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function advance() {
     if (!room) return;
-    const response = await fetch(`/api/rooms/${room.room.code}/advance`, { method: "POST" });
-    const payload = await response.json();
-    if (!response.ok) return setMessage(payload.error ?? "Erro ao simular.");
-    setRoom({ ...room, room: { ...room.room, state: payload.state } });
+    try {
+      setBusy(true);
+      setMessage("Simulando rodada...");
+      const response = await fetch(`/api/rooms/${room.room.code}/advance`, { method: "POST" });
+      const payload = await readApi(response);
+      if (!response.ok) return setMessage(payload.error ?? "Erro ao simular.");
+      setRoom({ ...room, room: { ...room.room, state: payload.state } });
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Erro de conexao ao simular.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveTactics(data: FormData) {
     if (!room) return;
-    const response = await fetch(`/api/rooms/${room.room.code}/tactics`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teamId: selectedTeam,
-        formation: data.get("formation"),
-        mentality: data.get("mentality"),
-        pressing: data.get("pressing"),
-        passing: data.get("passing"),
-        marking: data.get("marking")
-      })
-    });
-    const payload = await response.json();
-    if (!response.ok) return setMessage(payload.error ?? "Erro ao salvar tatica.");
-    setRoom({ ...room, room: { ...room.room, state: payload.state } });
+    try {
+      setBusy(true);
+      setMessage("Salvando tatica...");
+      const response = await fetch(`/api/rooms/${room.room.code}/tactics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamId: selectedTeam,
+          formation: data.get("formation"),
+          mentality: data.get("mentality"),
+          pressing: data.get("pressing"),
+          passing: data.get("passing"),
+          marking: data.get("marking")
+        })
+      });
+      const payload = await readApi(response);
+      if (!response.ok) return setMessage(payload.error ?? "Erro ao salvar tatica.");
+      setRoom({ ...room, room: { ...room.room, state: payload.state } });
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Erro de conexao ao salvar tatica.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const state = room?.room.state;
@@ -126,7 +188,7 @@ export function GameClient({ teams }: { teams: TeamInfo[] }) {
         {room && (
           <div className="actions">
             <span className="pill">Sala {room.room.code}</span>
-            <button className="primary" onClick={advance}>{state?.phase === "finished" ? "Copa encerrada" : "Simular proxima rodada"}</button>
+            <button className="primary" onClick={advance} disabled={busy || state?.phase === "finished"}>{busy ? "Aguarde..." : state?.phase === "finished" ? "Copa encerrada" : "Simular proxima rodada"}</button>
           </div>
         )}
       </div>
@@ -140,7 +202,8 @@ export function GameClient({ teams }: { teams: TeamInfo[] }) {
               <Field label="Seu nome" value={form.managerName} onChange={(managerName) => setForm({ ...form, managerName })} />
               <SelectTeam teams={teams} value={form.teamId} onChange={(teamId) => setForm({ ...form, teamId })} />
             </div>
-            <button className="primary" onClick={createRoom}>Criar Copa</button>
+            <button className="primary" onClick={createRoom} disabled={busy}>{busy ? "Aguarde..." : "Criar Copa"}</button>
+            {message && <p className="muted">{message}</p>}
           </section>
 
           <section className="panel">
@@ -151,8 +214,8 @@ export function GameClient({ teams }: { teams: TeamInfo[] }) {
               <SelectTeam teams={teams} value={form.teamId} onChange={(teamId) => setForm({ ...form, teamId })} />
             </div>
             <div className="actions">
-              <button className="primary" onClick={joinRoom}>Entrar e escolher time</button>
-              <button onClick={loadRoom}>Assistir sala</button>
+              <button className="primary" onClick={joinRoom} disabled={busy}>{busy ? "Aguarde..." : "Entrar e escolher time"}</button>
+              <button onClick={loadRoom} disabled={busy}>Assistir sala</button>
             </div>
             {message && <p className="muted">{message}</p>}
           </section>
